@@ -96,10 +96,7 @@ class ModulationReconstructDomainLossModule(torch.nn.Module):
         self.norm = norm
         self.fbank = Fbank(sample_rate=16000, n_fft=nfft,
                            n_mels=n_mels, hop_length=hop_length, win_length=window_length).to('cuda')
-        #mel_spect = torchaudio.transforms.MelSpectrogram(sample_rate=16000, n_fft=512, win_length=320, hop_length=160).to('cuda')
-        # def fbank(x):
-        #    return torch.log(mel_spect(x).transpose(2,1) +1e-8)
-        #self.fbank = fbank
+        
 
         self.use_relu = use_relu
         self.window_length = window_length
@@ -109,9 +106,7 @@ class ModulationReconstructDomainLossModule(torch.nn.Module):
         print('recon activation [{}] use squeeze [{}] recon norm [{}]'.format(
             self.reconstruct_activation, self.use_squeeze, self.reconstruct_norm))
 
-        print('init alpha weights [{}]'.format(self.alphas))
-        print('final alpha weights [{}]'.format(self.alphas_real))
-        self.count = 0
+        print('alpha weights [{}]'.format(self.alphas))
         self.input_norm = InputNormalization(norm_type='sentence')
 
     def switch_grad(self, model, requires_grad):
@@ -153,25 +148,12 @@ class ModulationReconstructDomainLossModule(torch.nn.Module):
             clean_mod = clean_mod - mean_clean_mod.unsqueeze(2)
             enhanced_mod = enhanced_mod - mean_enhanced_mod.unsqueeze(2)
 
-        if self.use_vad:
-            clean_wave = pad(clean_wave.squeeze(1), [200, 400])
-            mask = self.detect_silent_frames(
-                clean_wave, 40, int(self.window_length/1000*16000), int(.01*16000))
-
-            mask = 1.0*(mask.unsqueeze(-1))
-
-            mod_mse_loss = self.mse(enhanced_mod, clean_mod) * mask
-
-            mod_mse_loss = torch.mean(torch.sum(mod_mse_loss, dim=(
-                1, 2, 3))/torch.sum((clean_mod*mask)**2, dim=(1, 2, 3)))
-        else:
-            mod_mse_loss = self.mse(enhanced_mod, clean_mod)
-
-            mod_mse_loss = torch.mean(torch.sum(mod_mse_loss, dim=(
-                1, 2, 3))/torch.sum((clean_mod)**2, dim=(1, 2, 3)))
         
-        loss_enhanced = torch.FloatTensor([0.0]).to('cuda')
+        mod_mse_loss = self.mse(enhanced_mod, clean_mod)
 
+        mod_mse_loss = torch.mean(torch.sum(mod_mse_loss, dim=(
+            1, 2, 3))/torch.sum((clean_mod)**2, dim=(1, 2, 3)))
+        
         if self.tune_kernels:
             self.switch_grad(self.modulation_kernels, True)
 
@@ -194,9 +176,9 @@ class ModulationReconstructDomainLossModule(torch.nn.Module):
 
         total_loss = mod_mse_loss * \
             float(self.alphas[0]) + loss_clean * \
-            float(self.alphas[1]) + loss_enhanced * float(self.alphas[2])
+            float(self.alphas[1]) 
 
-        return total_loss, mod_mse_loss, loss_clean, loss_enhanced
+        return total_loss, mod_mse_loss, loss_clean
 
 
     
